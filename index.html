@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Simulatore Città Futuristica Completo</title>
+<style>
+  /* Reset e base */
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: #0b1224;
+    color: #a0c4ff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  header {
+    background: #122a54;
+    padding: 1rem;
+    font-size: 1.7rem;
+    letter-spacing: 2px;
+    text-align: center;
+    border-bottom: 2px solid #45a1ff;
+    user-select: none;
+  }
+  #container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  #city-map {
+    flex: 3;
+    display: grid;
+    grid-template-columns: repeat(20, 1fr);
+    grid-template-rows: repeat(20, 1fr);
+    gap: 2px;
+    background: #192c5c;
+    padding: 10px;
+    overflow-y: auto;
+  }
+  .tile {
+    background: #2c3e83;
+    border-radius: 5px;
+    position: relative;
+    cursor: pointer;
+    height: 35px;
+    user-select: none;
+    transition: border-color 0.3s;
+  }
+  .tile:hover {
+    border: 2px solid #45a1ff;
+  }
+  .building {
+    position: absolute;
+    inset: 4px;
+    border-radius: 5px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.1rem;
+    font-weight: 700;
+    user-select: none;
+    pointer-events: none;
+    transition: background-color 0.3s;
+    color: #001b3a;
+  }
+  .building.residential { background: #a7c7e7; }
+  .building.solar { background: #ffd966; color: #654c00; }
+  .building.factory { background: #999999; }
+  .building.research { background: #b080f0; }
+  .building.park { background: #6abd6d; }
+  #sidebar {
+    flex: 1;
+    background: #101f48;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    color: #99ccff;
+    overflow-y: auto;
+  }
+  #resources {
+    margin-bottom: 1rem;
+  }
+  #resources h3 {
+    margin: 0 0 0.5rem 0;
+  }
+  #resources .res-line {
+    margin: 5px 0;
+    font-weight: 600;
+    font-size: 1.1rem;
+  }
+  #build-options {
+    margin-bottom: 1rem;
+  }
+  #build-options h3 {
+    margin-bottom: 0.5rem;
+  }
+  button.build-btn {
+    background: #224a8a;
+    border: none;
+    color: #cce6ff;
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 600;
+    width: 100%;
+    transition: background 0.3s;
+  }
+  button.build-btn.selected {
+    background: #45a1ff;
+    color: #00294d;
+  }
+  button.build-btn:hover:not(.selected) {
+    background: #3366cc;
+  }
+  #log {
+    flex: 1;
+    background: #0a1a3b;
+    padding: 0.5rem;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    border-radius: 5px;
+    border: 1px solid #224a8a;
+    margin-bottom: 1rem;
+  }
+  #turn-controls {
+    margin-bottom: 1rem;
+  }
+  #turn-controls button {
+    background: #117aee;
+    border: none;
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.3s;
+  }
+  #turn-controls button:hover {
+    background: #005bbb;
+  }
+  /* Tooltip */
+  .tooltip {
+    position: absolute;
+    background: #224a8a;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    color: #cce6ff;
+    max-width: 160px;
+    z-index: 10;
+  }
+  #chart-container {
+    height: 150px;
+    background: #0a1a3b;
+    border-radius: 6px;
+    padding: 5px;
+  }
+  canvas {
+    width: 100% !important;
+    height: 150px !important;
+  }
+</style>
+</head>
+<body>
+
+<header>Simulatore Città Futuristica Completo</header>
+
+<div id="container">
+  <div id="city-map"></div>
+  <div id="sidebar">
+    <div id="resources">
+      <h3>Risorse</h3>
+      <p class="res-line">Energia: <span id="energy">100</span></p>
+      <p class="res-line">Popolazione: <span id="population">10</span></p>
+      <p class="res-line">Crediti: <span id="credits">500</span></p>
+      <p class="res-line">Ricerca: <span id="research">0</span></p>
+    </div>
+    <div id="build-options">
+      <h3>Costruisci / Demolisci</h3>
+      <button class="build-btn" data-type="residential">🏢 Residenziale (100 crediti)</button>
+      <button class="build-btn" data-type="solar">☀️ Centrale Solare (+10 energia, 150 crediti)</button>
+      <button class="build-btn" data-type="factory">🏭 Fabbrica (-5 energia, +5 crediti, 200 crediti)</button>
+      <button class="build-btn" data-type="research">🔬 Centro Ricerca (+2 ricerca, 300 crediti)</button>
+      <button class="build-btn" data-type="park">🌳 Parco (+3 popolazione felice, 80 crediti)</button>
+      <button class="build-btn" data-type="demolish" style="background:#a22;">🧹 Demolizione</button>
+    </div>
+    <div id="turn-controls">
+      <button id="next-turn">Avanza Turno</button>
+      <label>
+        <input type="checkbox" id="auto-turn" /> Auto-turno ogni 10s
+      </label>
+    </div>
+    <div id="chart-container">
+      <canvas id="resource-chart"></canvas>
+    </div>
+    <div id="log">
+      <strong>Eventi</strong>
+      <div id="log-messages"></div>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+  // Setup
+  const map = document.getElementById('city-map');
+  const energySpan = document.getElementById('energy');
+  const populationSpan = document.getElementById('population');
+  const creditsSpan = document.getElementById('credits');
+  const researchSpan = document.getElementById('research');
+  const logMessages = document.getElementById('log-messages');
+  const buildButtons = document.querySelectorAll('.build-btn');
+  const nextTurnBtn = document.getElementById('next-turn');
+  const autoTurnCheckbox = document.getElementById('auto-turn');
+  const tooltip = document.getElementById('tooltip');
+  const chartCanvas = document.getElementById('resource-chart').getContext('2d');
+
+  const MAP_SIZE = 20;
+  const TILE_COUNT = MAP_SIZE * MAP_SIZE;
+  const TILE_SIZE = 35;
+
+  // Stato città e risorse
+  let grid = new Array(TILE_COUNT).fill(null);
+  let energy = 100;
+  let population = 10;
+  let credits = 500;
+  let research = 0;
+
+  // Storico per grafico
+  let history = {
+    energy: [],
+    population: [],
+    credits: [],
+    research: []
+  };
+
+  let selectedBuilding = null;
+  let autoTurnInterval = null;
+
+  // Definizione edifici
+  const BUILDINGS = {
+    residential: {
+      name: 'Residenziale',
+      emoji: '🏢',
+      cost: 100,
+      energyEffect: 0,
+      populationEffect: 5,
+      creditsEffect: 0,
+      researchEffect: 0,
+      description: 'Aumenta la popolazione della città.'
+    },
+    solar: {
+      name: 'Centrale Solare',
+      emoji: '☀️',
+      cost: 150,
+      energyEffect: 10,
+      populationEffect: 0,
+      creditsEffect: 0,
+      researchEffect: 0,
+      description: 'Produce energia pulita.'
+    },
+    factory: {
+      name: 'Fabbrica',
+      emoji: '🏭',
+      cost: 200,
+      energyEffect: -5,
+      populationEffect: 0,
+      creditsEffect: 5,
+      researchEffect: 0,
+      description: 'Produce crediti consumando energia.'
+    },
+    research: {
+      name: 'Centro Ricerca',
+      emoji: '🔬',
+      cost: 300,
+      energyEffect: -2,
+      populationEffect: 0,
+      creditsEffect: 0,
+      researchEffect: 2,
+      description: 'Incrementa la ricerca tecnologica.'
+    },
+    park: {
+      name: 'Parco',
+      emoji: '🌳',
+      cost: 80,
+      energyEffect: 0,
+      populationEffect: 3,
+      creditsEffect: 0,
+      researchEffect: 0,
+      description: 'Aumenta la felicità e la popolazione.'
+    }
+  };
+
+  function createGrid() {
+    map.innerHTML = '';
+    for(let i = 0; i < TILE_COUNT; i++) {
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      tile.dataset.index = i;
+      tile.addEventListener('click', () => onTileClick(i));
+      tile.addEventListener('mousemove', (e) => onTileHover(i, e));
+      tile.addEventListener('mouseleave', () => tooltip.style.opacity = 0);
+      map.appendChild(tile);
+    }
+  }
+
+  function updateResourcesDisplay() {
+    energySpan.textContent = energy;
+    populationSpan.textContent = population;
+    creditsSpan.textContent = credits;
+    researchSpan.textContent = research;
+  }
+
+  function placeBuilding(index, type) {
+    if(grid[index]) {
+      logEvent(`La casella è già occupata.`);
+      return;
+    }
+    const b = BUILDINGS[type];
+    if(credits < b.cost) {
+      logEvent(`Crediti insufficienti per costruire ${b.name}.`);
+      return;
+    }
+    credits -= b.cost;
+    grid[index] = {
+      type: type,
+      effects: {
+        energy: b.energyEffect,
+        population: b.populationEffect,
+        credits: b.creditsEffect,
+        research: b.researchEffect
+      }
+    };
+    updateResources();
+    drawGrid();
+  }
+
+  function demolishBuilding(index) {
+    if(!grid[index]) {
+      logEvent('Non c\'è niente da demolire in questa casella.');
+      return;
+    }
+    const bType = grid[index].type;
+    grid[index] = null;
+    // Rimborso 50% costo
+    const refund = Math.floor(BUILDINGS[bType].cost / 2);
+    credits += refund;
+    logEvent(`Edificio demolito. Rimborso ${refund} crediti.`);
+    updateResources();
+    drawGrid();
+  }
+
+  function updateResources() {
+    // Reset a valori base
+    energy = 0;
+    population = 0;
+    credits = Math.max(credits, 0);
+    research = 0;
+    for(let tile of grid) {
+      if(tile) {
+        energy += tile.effects.energy;
+        population += tile.effects.population;
+        credits += tile.effects.credits;
+        research += tile.effects.research;
+      }
+    }
+    // Aggiungi una base minima di popolazione e energia se mancano (per non avere valori negativi troppo strani)
+    if(energy < 0) energy = 0;
+    if(population < 0) population = 0;
+    if(research < 0) research = 0;
+    updateResourcesDisplay();
+  }
+
+  function drawGrid() {
+    for(let i = 0; i < TILE_COUNT; i++) {
+      const tileDiv = map.children[i];
+      tileDiv.innerHTML = '';
+      if(grid[i]) {
+        const bType = grid[i].type;
+        const b = BUILDINGS[bType];
+        const bDiv = document.createElement('div');
+        bDiv.className = 'building ' + bType;
+        bDiv.textContent = b.emoji;
+        tileDiv.appendChild(bDiv);
+      }
+    }
+  }
+
+  function logEvent(text) {
+    const p = document.createElement('p');
+    p.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    logMessages.prepend(p);
+    if(logMessages.childElementCount > 100) {
+      logMessages.removeChild(logMessages.lastChild);
+    }
+  }
+
+  function onTileClick(index) {
+    if(selectedBuilding === 'demolish') {
+      demolishBuilding(index);
+      return;
+    }
+    if(selectedBuilding) {
+      placeBuilding(index, selectedBuilding);
+    }
+  }
+
+  function onTileHover(index, event) {
+    const tileData = grid[index];
+    if(tileData) {
+      const b = BUILDINGS[tileData.type];
+      tooltip.textContent = `${b.name}\n${b.description}\nCosto: ${b.cost} crediti\nEffetti: Energia ${b.energyEffect}, Popolazione ${b.populationEffect}, Crediti ${b.creditsEffect}, Ricerca ${b.researchEffect}`;
+    } else {
+      tooltip.textContent = `Casella vuota`;
+    }
+    tooltip.style.left = event.pageX + 10 + 'px';
+    tooltip.style.top = event.pageY + 10 + 'px';
+    tooltip.style.opacity = 1;
+  }
+
+  // Selezione costruzioni
+  buildButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      buildButtons.forEach(b => b.classList.remove('selected'));
+      if(selectedBuilding === btn.dataset.type) {
+        selectedBuilding = null;
+        btn.classList.remove('selected');
+      } else {
+        selectedBuilding = btn.dataset.type;
+        btn.classList.add('selected');
+      }
+    });
+  });
+
+  // Evento turno
+  function advanceTurn() {
+    // Eventi casuali
+    const rand = Math.random();
+    if(rand < 0.15) {
+      // Evento positivo casuale
+      const bonus = Math.floor(Math.random()*50)+10;
+      credits += bonus;
+      logEvent(`Hai ricevuto un bonus di ${bonus} crediti!`);
+    } else if(rand < 0.25) {
+      // Evento negativo casuale
+      const loss = Math.floor(Math.random()*30)+10;
+      credits -= loss;
+      if(credits < 0) credits = 0;
+      logEvent(`Un guasto ha causato una perdita di ${loss} crediti.`);
+    }
+    // Aggiorna risorse da edifici
+    updateResources();
+    saveGame();
+    updateHistory();
+    drawGrid();
+  }
+
+  nextTurnBtn.addEventListener('click', advanceTurn);
+
+  // Auto turno
+  autoTurnCheckbox.addEventListener('change', () => {
+    if(autoTurnCheckbox.checked) {
+      autoTurnInterval = setInterval(advanceTurn, 10000);
+      logEvent('Auto-turno attivato.');
+    } else {
+      clearInterval(autoTurnInterval);
+      logEvent('Auto-turno disattivato.');
+    }
+  });
+
+  // Grafico risorse usando Canvas semplice
+  let chartWidth = 400;
+  let chartHeight = 150;
+  let maxPoints = 20;
+
+  function updateHistory() {
+    addToHistory('energy', energy);
+    addToHistory('population', population);
+    addToHistory('credits', credits);
+    addToHistory('research', research);
+    drawChart();
+  }
+
+  function addToHistory(key, value) {
+    history[key].push(value);
+    if(history[key].length > maxPoints) {
+      history[key].shift();
+    }
+  }
+
+  function drawChart() {
+    // Pulisci
+    chartCanvas.clearRect(0, 0, chartCanvas.canvas.width, chartCanvas.canvas.height);
+    chartCanvas.canvas.width = chartCanvas.canvas.clientWidth * 2;
+    chartCanvas.canvas.height = chartCanvas.canvas.clientHeight * 2;
+    chartCanvas.scale(2, 2);
+
+    const colors = {
+      energy: '#ffdd00',
+      population: '#00ff99',
+      credits: '#3399ff',
+      research: '#cc66ff'
+    };
+
+    let keys = Object.keys(history);
+    let maxY = 100;
+    for(let key of keys) {
+      const arr = history[key];
+      if(arr.length) {
+        const localMax = Math.max(...arr);
+        if(localMax > maxY) maxY = localMax;
+      }
+    }
+
+    // Disegna linee per ogni risorsa
+    keys.forEach(key => {
+      chartCanvas.strokeStyle = colors[key];
+      chartCanvas.lineWidth = 2;
+      chartCanvas.beginPath();
+      let arr = history[key];
+      for(let i=0; i<arr.length; i++) {
+        let x = (i/(maxPoints-1)) * chartCanvas.canvas.clientWidth;
+        let y = chartCanvas.canvas.clientHeight - (arr[i]/maxY)*chartCanvas.canvas.clientHeight;
+        if(i === 0) chartCanvas.moveTo(x, y);
+        else chartCanvas.lineTo(x, y);
+      }
+      chartCanvas.stroke();
+    });
+
+    // Etichette legenda
+    let yPos = 15;
+    keys.forEach(key => {
+      chartCanvas.fillStyle = colors[key];
+      chartCanvas.font = "bold 12px Segoe UI";
+      chartCanvas.fillText(key.charAt(0).toUpperCase() + key.slice(1), 5, yPos);
+      yPos += 18;
+    });
+  }
+
+  // Salvataggio locale
+  function saveGame() {
+    const saveData = {
+      grid: grid,
+      credits: credits,
+      energy: energy,
+      population: population,
+      research: research,
+      history: history
+    };
+    localStorage.setItem('citySimSave', JSON.stringify(saveData));
+  }
+
+  function loadGame() {
+    const data = localStorage.getItem('citySimSave');
+    if(!data) return false;
+    try {
+      const parsed = JSON.parse(data);
+      grid = parsed.grid || grid;
+      credits = parsed.credits || credits;
+      energy = parsed.energy || energy;
+      population = parsed.population || population;
+      research = parsed.research || research;
+      history = parsed.history || history;
+      updateResourcesDisplay();
+      drawGrid();
+      updateHistory();
+      logEvent('Salvataggio caricato.');
+      return true;
+    } catch(e) {
+      console.error('Errore caricamento salvataggio', e);
+      return false;
+    }
+  }
+
+  // Inizializzazione
+  createGrid();
+  loadGame() || updateResources();
+  updateHistory();
+</script>
+
+</body>
+</html>
